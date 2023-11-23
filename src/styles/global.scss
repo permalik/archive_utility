@@ -1,0 +1,84 @@
+:root {
+  --primary-dark: #141414;
+  --primary-dark-100: hsla(0, 0%, 8%, .5);
+  --primary-light: #FEFBFB;
+  --primary-light-750: hsla(0, 60%, 99%, .75);
+  --primary-light-250: hsla(0, 60%, 99%, .25);
+  --primary-light-100: hsla(0, 60%, 99%, .05);
+  --secondary-accent: #beb80a;
+  --tertiary-accent: #40E5FB;
+  --tertiary-accent-750: hsla(187, 96%, 62%, 0.75);
+  --sans-font: 'Karla Variable', sans-serif;
+  --serif-font: 'Merriweather', serif;
+  --base-font: clamp(.75rem, 4vw, 1rem);
+  --heading-one: clamp(1.75rem, 5vw, 2rem);
+  --heading-two: clamp(1.25rem, 5vw, 1.5rem);
+  --heading-three: 1.125rem;
+  --heading-four: 1.125rem;
+  --heading-five: 1.05rem;
+  --small-font: clamp(0.75rem, 3vw, .8rem);
+  --xs-font: clamp(0.5rem, 3vw, .65rem);
+}
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+body {
+  background-color: var(--primary-dark);
+  color: var(--primary-light);
+
+  font-family: var(--sans-font);
+  font-weight: 300;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+input, button, textarea, select {
+  font: inherit;
+}
+h1 {
+  font-size: var(--heading-one);
+}
+h2 {
+  font-size: var(--heading-two);
+}
+h3 {
+  font-size: var(--heading-three);
+}
+h4 {
+  font-size: var(--heading-four);
+}
+h5, h6 {
+  font-size: var(--heading-five);
+}
+small, .text_small {
+  font-size: var(--small-font);
+}
+small, .text_xs_small {
+  font-size: var(--xs-font);
+}
+p, a {
+  font-size: var(--base-font);
+}
+a {
+  color: var(--primary-light);
+
+  text-decoration: none;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+  }
+}
+ul {
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
