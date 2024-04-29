@@ -12,37 +12,13 @@ import (
 
 var ctx = context.Background()
 
-func main() {
-
-	// TODO: drop in viper for godotenv
-	lo.G(0, "launch: godotenv", nil)
-	err := godotenv.Load()
-	if err != nil {
-		lo.G(1, "load: .env", err)
-	}
-
-	lo.G(0, "launch: go-github", nil)
-	ghPAT := os.Getenv("GITHUB_PAT")
-	ghClient := github.NewClient(nil).WithAuthToken(ghPAT)
-
-	lo.G(0, "launch: redis", nil)
-	redisURI := os.Getenv("REDIS_URI")
-	opt, _ := redis.ParseURL(redisURI)
-	rClient := redis.NewClient(opt)
-
-	cfg := repo.Config{
-		Name: "permalik",
-		Org:  false,
-		Ctx:  ctx,
-		GC:   ghClient,
-	}
+func run(cfg repo.Config) {
 	permalikRepos := repo.GHRepos(cfg)
 	var ghRepos []repo.Repo
 	if len(permalikRepos) > 0 {
 		ghRepos = append(ghRepos, permalikRepos...)
 	}
 
-	cfg.RC = rClient
 	redisKeys := repo.RedisKeys(cfg)
 	if redisKeys == nil {
 		for _, v := range ghRepos {
@@ -68,4 +44,32 @@ func main() {
 		}
 		lo.G(0, "task complete", nil)
 	}
+}
+
+func main() {
+
+	lo.G(0, "launch: godotenv", nil)
+	err := godotenv.Load()
+	if err != nil {
+		lo.G(1, "load: .env", err)
+	}
+
+	lo.G(0, "launch: go-github", nil)
+	ghPAT := os.Getenv("GITHUB_PAT")
+	ghClient := github.NewClient(nil).WithAuthToken(ghPAT)
+
+	lo.G(0, "launch: redis", nil)
+	redisURI := os.Getenv("REDIS_URI")
+	opt, _ := redis.ParseURL(redisURI)
+	rClient := redis.NewClient(opt)
+
+	cfg := repo.Config{
+		Name: "permalik",
+		Org:  false,
+		Ctx:  ctx,
+		GC:   ghClient,
+		RC:   rClient,
+	}
+
+	run(cfg)
 }
