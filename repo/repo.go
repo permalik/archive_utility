@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/google/go-github/v61/github"
-	"github.com/permalik/utility/lo"
-	"github.com/redis/go-redis/v9"
+	"log"
 	"time"
+
+	"github.com/google/go-github/v61/github"
+	"github.com/redis/go-redis/v9"
 )
 
 type Config struct {
@@ -72,10 +73,10 @@ func GHRepos(cfg Config) []Repo {
 		opt := &github.RepositoryListByOrgOptions{Type: "public", Sort: "created", ListOptions: listOpt}
 		data, _, err := cfg.GC.Repositories.ListByOrg(cfg.Ctx, cfg.Name, opt)
 		if err != nil {
-			lo.G(1, "github: ListByOrg", err)
+			log.Fatalf("github: ListByOrg\n%v", err)
 		}
 		if len(data) <= 0 {
-			lo.G(0, "github: no data returned from GithubAll", cfg.Name)
+			log.Fatalf("github: no data returned from GithubAll")
 			return arr
 		}
 		arr = parseGH(r, arr, data)
@@ -84,10 +85,10 @@ func GHRepos(cfg Config) []Repo {
 		opt := &github.RepositoryListByUserOptions{Type: "public", Sort: "created", ListOptions: listOpt}
 		data, _, err := cfg.GC.Repositories.ListByUser(cfg.Ctx, cfg.Name, opt)
 		if err != nil {
-			lo.G(0, "github: ListByUser", err)
+			log.Fatalf("github: ListByUser\n%v", err)
 		}
 		if len(data) <= 0 {
-			lo.G(0, "github: no data returned from GithubAll", cfg.Name)
+			log.Fatalf("github: no data returned from GithubAll", cfg.Name)
 			return arr
 		}
 		arr = parseGH(r, arr, data)
@@ -99,10 +100,10 @@ func RedisKeys(cfg Config) []string {
 
 	res, err := cfg.RC.Keys(cfg.Ctx, "*").Result()
 	if errors.Is(err, redis.Nil) {
-		lo.G(0, "RedisAll: redis.Nil: keys not found", err)
+		log.Fatalf("RedisAll: redis.Nil: keys not found\n%v", err)
 		return nil
 	} else if err != nil {
-		lo.G(0, "RedisAll: keys not found", err)
+		log.Fatalf("RedisAll: keys not found\n%v", err)
 	}
 	return res
 }
@@ -111,13 +112,13 @@ func RedisSet(r Repo, cfg Config) error {
 
 	data, err := json.Marshal(r.Data)
 	if err != nil {
-		lo.G(0, "RedisSet: json.Marshal", err)
+		log.Fatalf("RedisSet: json.Marshal\n%v", err)
 		return err
 	}
 
 	err = cfg.RC.Set(cfg.Ctx, r.Name, data, 0).Err()
 	if err != nil {
-		lo.G(1, "RedisSet: Item not set", err)
+		log.Fatalf("RedisSet: Item not set\n%v", err)
 		return err
 	}
 	return nil
@@ -127,11 +128,11 @@ func RedisDelete(r Repo, name string, cfg Config) error {
 
 	_, err := cfg.RC.Del(cfg.Ctx, name).Result()
 	if errors.Is(err, redis.Nil) {
-		lo.G(0, "RedisRemoveOne: name does not exist", err)
+		log.Fatalf("RedisRemoveOne: name does not exist\n%v", err)
 		return nil
 	}
 	if err != nil {
-		lo.G(0, "RedisRemoveOne: RC.Del", err)
+		log.Fatalf("RedisRemoveOne: RC.Del\n%v", err)
 		return err
 	}
 	return nil

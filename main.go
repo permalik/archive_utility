@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+
 	"github.com/google/go-github/v61/github"
 	"github.com/joho/godotenv"
-	"github.com/permalik/utility/lo"
 	"github.com/permalik/utility/repo"
 	"github.com/redis/go-redis/v9"
-	"os"
 )
 
 var ctx = context.Background()
@@ -24,41 +25,41 @@ func run(cfg repo.Config) {
 		for _, v := range ghRepos {
 			err := repo.RedisSet(v, cfg)
 			if err != nil {
-				lo.G(1, "RedisSet", err)
+				log.Fatalf("RedisSet:\n%v", err)
 			}
 		}
-		lo.G(0, "task complete", nil)
+		log.Println("task complete")
 	} else {
 		for _, v := range redisKeys {
 			var r repo.Repo
 			err := repo.RedisDelete(r, v, cfg)
 			if err != nil {
-				lo.G(1, "RedisRemoveOne", err)
+				log.Fatalf("RedisRemoveOne:\n%v", err)
 			}
 		}
 		for _, v := range ghRepos {
 			err := repo.RedisSet(v, cfg)
 			if err != nil {
-				lo.G(1, "RedisAddOne", err)
+				log.Fatalf("RedisAddOne:\n%v", err)
 			}
 		}
-		lo.G(0, "task complete", nil)
+		log.Println("task complete")
 	}
 }
 
 func main() {
 
-	lo.G(0, "launch: godotenv", nil)
+	log.Println("launch: godotenv")
 	err := godotenv.Load()
 	if err != nil {
-		lo.G(1, "load: .env", err)
+		log.Fatalf("load .env:\n%v", err)
 	}
 
-	lo.G(0, "launch: go-github", nil)
+	log.Println("launch: go-github")
 	ghPAT := os.Getenv("GITHUB_PAT")
 	ghClient := github.NewClient(nil).WithAuthToken(ghPAT)
 
-	lo.G(0, "launch: redis", nil)
+	log.Println("launch: redis")
 	redisURI := os.Getenv("REDIS_URI")
 	opt, _ := redis.ParseURL(redisURI)
 	rClient := redis.NewClient(opt)
