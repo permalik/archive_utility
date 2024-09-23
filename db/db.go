@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	_ "github.com/jackc/pgx/stdlib"
 )
 
 var pool *sql.DB
