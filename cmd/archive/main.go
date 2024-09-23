@@ -14,44 +14,12 @@ import (
 	"github.com/google/go-github/v61/github"
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/permalik/utility/models"
 )
 
 var ghCtx = context.Background()
 
 var pool *sql.DB
-
-type data struct {
-	ID          int64
-	FullName    string
-	Description string
-	HTMLURL     string
-	Homepage    string
-	Topics      []string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type repo struct {
-	Name string
-	Data data
-}
-
-type jsonRepo struct {
-	Owner       string `json:"owner"`
-	Name        string `json:"name"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
-	HTMLURL     string `json:"htmlurl"`
-	Homepage    string `json:"homepage"`
-	Topics      string `json:"topics"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
-	UID         int    `json:"uid"`
-}
-
-// TODO: store repos in pg
-// TODO: send email to pm
-// TODO: serve repos from api
 
 func main() {
 	err := godotenv.Load()
@@ -63,7 +31,7 @@ func main() {
 	gc := github.NewClient(nil).WithAuthToken(ghPAT)
 
 	permalikRepos := ghRepos(gc, "permalik", false)
-	var allRepos []repo
+	var allRepos []models.Repo
 	if len(permalikRepos) > 0 {
 		allRepos = append(allRepos, permalikRepos...)
 	}
@@ -143,7 +111,7 @@ func dropRepos(dbCtx context.Context) {
 	}
 }
 
-func insertRepos(dbCtx context.Context, r repo) {
+func insertRepos(dbCtx context.Context, r models.Repo) {
 	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
 	defer cancel()
 
@@ -217,7 +185,7 @@ func selectRepos(dbCtx context.Context) ([]byte, error) {
 	}
 	defer rows.Close()
 
-	var repos []jsonRepo
+	var repos []models.JsonRepo
 	for rows.Next() {
 		var (
 			id          int
@@ -246,7 +214,7 @@ func selectRepos(dbCtx context.Context) ([]byte, error) {
 			&uid); err != nil {
 			log.Fatal(err)
 		}
-		repo := jsonRepo{
+		repo := models.JsonRepo{
 			Owner:       owner,
 			Name:        name,
 			Category:    category,
@@ -278,7 +246,7 @@ func selectRepos(dbCtx context.Context) ([]byte, error) {
 	return jsonData, nil
 }
 
-func parseGH(repo repo, arr []repo, ghData []*github.Repository) []repo {
+func parseGH(repo models.Repo, arr []models.Repo, ghData []*github.Repository) []models.Repo {
 	for _, v := range ghData {
 		timestampCA := v.GetCreatedAt()
 		pointerCA := timestampCA.GetTime()
@@ -286,7 +254,7 @@ func parseGH(repo repo, arr []repo, ghData []*github.Repository) []repo {
 		timestampUA := v.GetUpdatedAt()
 		pointerUA := timestampUA.GetTime()
 		updatedAt := *pointerUA
-		d := data{
+		d := models.RepoData{
 			ID:          v.GetID(),
 			FullName:    v.GetFullName(),
 			Description: v.GetDescription(),
@@ -303,9 +271,9 @@ func parseGH(repo repo, arr []repo, ghData []*github.Repository) []repo {
 	return arr
 }
 
-func ghRepos(gc *github.Client, name string, isOrg bool) []repo {
-	var r repo
-	var arr []repo
+func ghRepos(gc *github.Client, name string, isOrg bool) []models.Repo {
+	var r models.Repo
+	var arr []models.Repo
 	listOpt := github.ListOptions{Page: 1, PerPage: 25}
 
 	if isOrg {
