@@ -39,8 +39,6 @@ func main() {
 	for _, v := range allRepos {
 		insertRepos(pool, ctx, v)
 	}
-
-	gmail.EmailUpdate()
 }
 
 func dropRepos(pool *sql.DB, ctx context.Context) {

@@ -1,4 +1,4 @@
-package gmail
+package main
 
 import (
 	"fmt"
@@ -6,9 +6,15 @@ import (
 	"net/smtp"
 	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
-func EmailUpdate() {
+func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("failed to load .env", err)
+	}
 	username := os.Getenv("USERNAME")
 	password := os.Getenv("PASSWORD")
 	from := os.Getenv("FROM")
@@ -24,7 +30,7 @@ func EmailUpdate() {
 	hostname := os.Getenv("HOSTNAME")
 	auth := smtp.PlainAuth("", username, password, hostname)
 
-	err := smtp.SendMail(hostname+":587", auth, from, recipients, msg)
+	err = smtp.SendMail(hostname+":587", auth, from, recipients, msg)
 	if err != nil {
 		log.Fatal(err)
 	}
