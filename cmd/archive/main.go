@@ -16,7 +16,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var ctxBG = context.Background()
+var ghCtx = context.Background()
 
 var pool *sql.DB
 
@@ -79,7 +79,7 @@ func main() {
 	pool.SetMaxIdleConns(3)
 	pool.SetMaxOpenConns(3)
 
-	ctx, stop := context.WithCancel(context.Background())
+	dbCtx, stop := context.WithCancel(context.Background())
 	defer stop()
 
 	appSignal := make(chan os.Signal, 3)
@@ -90,27 +90,27 @@ func main() {
 		stop()
 	}()
 
-	ping(ctx)
+	ping(dbCtx)
 
-	dropRepos(ctx)
-	createRepos(ctx)
+	dropRepos(dbCtx)
+	createRepos(dbCtx)
 	for _, v := range allRepos {
-		insertRepos(ctx, v)
+		insertRepos(dbCtx, v)
 	}
-	selectRepos(ctx)
+	selectRepos(dbCtx)
 }
 
-func ping(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+func ping(dbCtx context.Context) {
+	dbCtx, cancel := context.WithTimeout(dbCtx, 1*time.Second)
 	defer cancel()
 
-	if err := pool.PingContext(ctx); err != nil {
+	if err := pool.PingContext(dbCtx); err != nil {
 		log.Fatalf("unable to connect to database:\n%v", err)
 	}
 }
 
-func createRepos(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func createRepos(dbCtx context.Context) {
+	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
 	defer cancel()
 
 	createQuery := `CREATE TABLE repos (
@@ -127,24 +127,24 @@ func createRepos(ctx context.Context) {
         uid INT
     )`
 
-	_, err := pool.ExecContext(ctx, createQuery)
+	_, err := pool.ExecContext(dbCtx, createQuery)
 	if err != nil {
 		log.Fatal("unable to create table", err)
 	}
 }
 
-func dropRepos(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func dropRepos(dbCtx context.Context) {
+	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
 	defer cancel()
 
-	_, err := pool.ExecContext(ctx, "DROP TABLE repos;")
+	_, err := pool.ExecContext(dbCtx, "DROP TABLE repos;")
 	if err != nil {
 		log.Fatal("unable to drop table", err)
 	}
 }
 
-func insertRepos(ctx context.Context, r repo) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func insertRepos(dbCtx context.Context, r repo) {
+	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
 	defer cancel()
 
 	ownerBefore, nameAfter, _ := strings.Cut(r.Data.FullName, "/")
@@ -184,7 +184,7 @@ func insertRepos(ctx context.Context, r repo) {
     RETURNING id;
     `
 
-	result, err := pool.ExecContext(ctx, query,
+	result, err := pool.ExecContext(dbCtx, query,
 		owner,
 		name,
 		category,
@@ -207,11 +207,11 @@ func insertRepos(ctx context.Context, r repo) {
 	}
 }
 
-func selectRepos(ctx context.Context) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func selectRepos(dbCtx context.Context) ([]byte, error) {
+	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
 	defer cancel()
 
-	rows, err := pool.QueryContext(ctx, "select * from repos;")
+	rows, err := pool.QueryContext(dbCtx, "select * from repos;")
 	if err != nil {
 		log.Fatal("unable to execute select all", err)
 	}
@@ -310,7 +310,7 @@ func ghRepos(gc *github.Client, name string, isOrg bool) []repo {
 
 	if isOrg {
 		opts := &github.RepositoryListByOrgOptions{Type: "public", Sort: "created", ListOptions: listOpt}
-		data, _, err := gc.Repositories.ListByOrg(ctxBG, name, opts)
+		data, _, err := gc.Repositories.ListByOrg(ghCtx, name, opts)
 		if err != nil {
 			log.Fatalf("github: ListByOrg\n%v", err)
 		}
@@ -321,7 +321,7 @@ func ghRepos(gc *github.Client, name string, isOrg bool) []repo {
 		return arr
 	} else {
 		opts := &github.RepositoryListByUserOptions{Type: "public", Sort: "created", ListOptions: listOpt}
-		data, _, err := gc.Repositories.ListByUser(ctxBG, name, opts)
+		data, _, err := gc.Repositories.ListByUser(ghCtx, name, opts)
 		if err != nil {
 			log.Fatalf("github: ListByUser\n%v", err)
 		}
