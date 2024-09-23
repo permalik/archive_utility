@@ -3,17 +3,29 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/permalik/utility/db"
-	"github.com/permalik/utility/models"
 )
+
+type config struct {
+	env  string
+	port int
+}
+
+type application struct {
+	config config
+	ctx    context.Context
+	pool   *sql.DB
+	logger *log.Logger
+}
 
 func main() {
 	err := godotenv.Load()
@@ -21,85 +33,54 @@ func main() {
 		log.Fatal("failed to load .env", err)
 	}
 
+	var cfg config
+	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+	flag.IntVar(&cfg.port, "port", 5555, "Network port (default 5555)")
+	flag.Parse()
+
+	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
 	pool := db.InitDB()
 	defer pool.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	db.Ping(ctx)
+	app := &application{
+		config: cfg,
+		ctx:    ctx,
+		pool:   pool,
+		logger: logger,
+	}
 
-	selectRepos(pool, ctx)
-}
+	if err := db.Ping(ctx); err != nil {
+		logger.Fatal(err)
+	}
 
-func selectRepos(pool *sql.DB, ctx context.Context) ([]byte, error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.port),
+		Handler:      app.router(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	go func() {
+		logger.Printf("starting %s server on port %s\n", cfg.env, srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal(err)
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Println("shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rows, err := pool.QueryContext(ctx, "select * from repos;")
-	if err != nil {
-		log.Fatal("unable to execute select all", err)
-	}
-	defer rows.Close()
-
-	var repos []models.JsonRepo
-	for rows.Next() {
-		var (
-			id          int
-			owner       string
-			name        string
-			category    string
-			description string
-			htmlURL     string
-			homepage    string
-			topics      string
-			createdAt   string
-			updatedAt   string
-			uid         int
-		)
-		if err := rows.Scan(
-			&id,
-			&owner,
-			&name,
-			&category,
-			&description,
-			&htmlURL,
-			&homepage,
-			&topics,
-			&createdAt,
-			&updatedAt,
-			&uid); err != nil {
-			log.Fatal(err)
-		}
-		repo := models.JsonRepo{
-			Owner:       owner,
-			Name:        name,
-			Category:    category,
-			Description: description,
-			HTMLURL:     htmlURL,
-			Homepage:    homepage,
-			Topics:      topics,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-			UID:         uid,
-		}
-		repos = append(repos, repo)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Fatal("server shutdown failed:", err)
 	}
 
-	rerr := rows.Close()
-	if rerr != nil {
-		log.Fatal(rerr)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	jsonData, err := json.Marshal(repos)
-	if err != nil {
-		log.Fatalf("error marshaling to json:\n%v", err)
-	}
-	fmt.Println(string(jsonData))
-	return jsonData, nil
+	logger.Println("server exited gracefully")
 }

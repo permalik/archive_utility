@@ -27,11 +27,13 @@ func InitDB() *sql.DB {
 	return pool
 }
 
-func Ping(ctx context.Context) {
+func Ping(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
 	if err := pool.PingContext(ctx); err != nil {
 		log.Fatalf("unable to connect to database:\n%v", err)
+		return err
 	}
+	return nil
 }
