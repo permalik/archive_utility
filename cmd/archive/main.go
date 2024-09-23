@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/permalik/utility/db"
 	"github.com/permalik/utility/github"
+	"github.com/permalik/utility/gmail"
 	"github.com/permalik/utility/models"
 )
 
@@ -38,6 +39,8 @@ func main() {
 	for _, v := range allRepos {
 		insertRepos(pool, ctx, v)
 	}
+
+	gmail.EmailUpdate()
 }
 
 func dropRepos(pool *sql.DB, ctx context.Context) {
