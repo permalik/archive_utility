@@ -11,15 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v61/github"
 	_ "github.com/jackc/pgx/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/permalik/utility/db"
+	"github.com/permalik/utility/github"
 	"github.com/permalik/utility/models"
 )
-
-var ghCtx = context.Background()
-
-var pool *sql.DB
 
 func main() {
 	err := godotenv.Load()
@@ -27,58 +24,39 @@ func main() {
 		log.Fatal("failed to load .env", err)
 	}
 
-	ghPAT := os.Getenv("GH_PAT")
-	gc := github.NewClient(nil).WithAuthToken(ghPAT)
-
-	permalikRepos := ghRepos(gc, "permalik", false)
-	var allRepos []models.Repo
-	if len(permalikRepos) > 0 {
-		allRepos = append(allRepos, permalikRepos...)
-	}
-
-	dsn := os.Getenv("DSN")
-	pool, err = sql.Open("pgx", dsn)
-	if err != nil {
-		log.Fatal("unable to use dsn", err)
-	}
+	pool := db.InitDB()
 	defer pool.Close()
 
-	pool.SetConnMaxLifetime(0)
-	pool.SetMaxIdleConns(3)
-	pool.SetMaxOpenConns(3)
-
-	dbCtx, stop := context.WithCancel(context.Background())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	appSignal := make(chan os.Signal, 3)
-	signal.Notify(appSignal, os.Interrupt)
+	db.Ping(ctx)
 
-	go func() {
-		<-appSignal
-		stop()
-	}()
+	dropRepos(pool, ctx)
+	createRepos(pool, ctx)
 
-	ping(dbCtx)
+	allRepos := github.GithubClient()
 
-	dropRepos(dbCtx)
-	createRepos(dbCtx)
 	for _, v := range allRepos {
-		insertRepos(dbCtx, v)
+		insertRepos(pool, ctx, v)
 	}
-	selectRepos(dbCtx)
+	selectRepos(pool, ctx)
 }
 
-func ping(dbCtx context.Context) {
-	dbCtx, cancel := context.WithTimeout(dbCtx, 1*time.Second)
+func dropRepos(pool *sql.DB, ctx context.Context) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := pool.PingContext(dbCtx); err != nil {
-		log.Fatalf("unable to connect to database:\n%v", err)
+	_, err := pool.ExecContext(ctx, "DROP TABLE repos;")
+	if err != nil {
+		log.Fatal("unable to drop table", err)
 	}
 }
 
-func createRepos(dbCtx context.Context) {
-	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
+func createRepos(pool *sql.DB, ctx context.Context) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	createQuery := `CREATE TABLE repos (
@@ -95,24 +73,15 @@ func createRepos(dbCtx context.Context) {
         uid INT
     )`
 
-	_, err := pool.ExecContext(dbCtx, createQuery)
+	_, err := pool.ExecContext(ctx, createQuery)
 	if err != nil {
 		log.Fatal("unable to create table", err)
 	}
 }
 
-func dropRepos(dbCtx context.Context) {
-	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
-	defer cancel()
-
-	_, err := pool.ExecContext(dbCtx, "DROP TABLE repos;")
-	if err != nil {
-		log.Fatal("unable to drop table", err)
-	}
-}
-
-func insertRepos(dbCtx context.Context, r models.Repo) {
-	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
+func insertRepos(pool *sql.DB, ctx context.Context, r models.Repo) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	ownerBefore, nameAfter, _ := strings.Cut(r.Data.FullName, "/")
@@ -152,7 +121,7 @@ func insertRepos(dbCtx context.Context, r models.Repo) {
     RETURNING id;
     `
 
-	result, err := pool.ExecContext(dbCtx, query,
+	result, err := pool.ExecContext(ctx, query,
 		owner,
 		name,
 		category,
@@ -175,11 +144,12 @@ func insertRepos(dbCtx context.Context, r models.Repo) {
 	}
 }
 
-func selectRepos(dbCtx context.Context) ([]byte, error) {
-	dbCtx, cancel := context.WithTimeout(dbCtx, 5*time.Second)
+func selectRepos(pool *sql.DB, ctx context.Context) ([]byte, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	rows, err := pool.QueryContext(dbCtx, "select * from repos;")
+	rows, err := pool.QueryContext(ctx, "select * from repos;")
 	if err != nil {
 		log.Fatal("unable to execute select all", err)
 	}
@@ -244,59 +214,4 @@ func selectRepos(dbCtx context.Context) ([]byte, error) {
 	}
 	fmt.Println(string(jsonData))
 	return jsonData, nil
-}
-
-func parseGH(repo models.Repo, arr []models.Repo, ghData []*github.Repository) []models.Repo {
-	for _, v := range ghData {
-		timestampCA := v.GetCreatedAt()
-		pointerCA := timestampCA.GetTime()
-		createdAt := *pointerCA
-		timestampUA := v.GetUpdatedAt()
-		pointerUA := timestampUA.GetTime()
-		updatedAt := *pointerUA
-		d := models.RepoData{
-			ID:          v.GetID(),
-			FullName:    v.GetFullName(),
-			Description: v.GetDescription(),
-			HTMLURL:     v.GetHTMLURL(),
-			Homepage:    v.GetHomepage(),
-			Topics:      v.Topics,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-		}
-		repo.Name = v.GetName()
-		repo.Data = d
-		arr = append(arr, repo)
-	}
-	return arr
-}
-
-func ghRepos(gc *github.Client, name string, isOrg bool) []models.Repo {
-	var r models.Repo
-	var arr []models.Repo
-	listOpt := github.ListOptions{Page: 1, PerPage: 25}
-
-	if isOrg {
-		opts := &github.RepositoryListByOrgOptions{Type: "public", Sort: "created", ListOptions: listOpt}
-		data, _, err := gc.Repositories.ListByOrg(ghCtx, name, opts)
-		if err != nil {
-			log.Fatalf("github: ListByOrg\n%v", err)
-		}
-		if len(data) <= 0 {
-			log.Fatalf("github: no data returned from GithubAll")
-		}
-		arr = parseGH(r, arr, data)
-		return arr
-	} else {
-		opts := &github.RepositoryListByUserOptions{Type: "public", Sort: "created", ListOptions: listOpt}
-		data, _, err := gc.Repositories.ListByUser(ghCtx, name, opts)
-		if err != nil {
-			log.Fatalf("github: ListByUser\n%v", err)
-		}
-		if len(data) <= 0 {
-			log.Fatalf("github: no data returned from GithubAll\n%s", name)
-		}
-		arr = parseGH(r, arr, data)
-		return arr
-	}
 }
