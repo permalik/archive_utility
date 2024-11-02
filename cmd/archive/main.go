@@ -45,9 +45,26 @@ func dropRepos(pool *sql.DB, ctx context.Context) {
 	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	_, err := pool.ExecContext(ctx, "DROP TABLE repos;")
+	var exists bool
+	err := pool.QueryRowContext(ctx, `
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_name = 'repos'
+        );
+    `).Scan(&exists)
 	if err != nil {
-		log.Fatal("unable to drop table", err)
+		log.Fatal("unable to check if table exists: ", err)
+	}
+
+	if exists {
+		_, err := pool.ExecContext(ctx, "DROP TABLE repos;")
+		if err != nil {
+			log.Fatal("unable to drop table", err)
+		}
+		log.Println("table 'repos' successfully dropped")
+	} else {
+		log.Println("table 'repos', does not exist, skipping drop")
 	}
 }
 
