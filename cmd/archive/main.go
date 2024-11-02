@@ -13,7 +13,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/permalik/utility/db"
 	"github.com/permalik/utility/github"
-	"github.com/permalik/utility/gmail"
 	"github.com/permalik/utility/models"
 )
 
